@@ -18,3 +18,4 @@ Makefile.in
 /src/tmk
 .vscode
 /a.out
+/INSTALL
