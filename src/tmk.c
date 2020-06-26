@@ -95,7 +95,7 @@ static int notetranslate(char a){
 
 static int octavetranslate(char a){
 	if(a == '#') return octave;
-	else if(a>='0' && a<='9') return (a-'0');
+	else if(a>='0' && a<='9') return (a+1-'0');
 	else if(a>='a' && a<='z') return (octave-(a+1-'a'));
 	else if(a>='A' && a<='Z') return (octave+(a+1-'A'));
 	else return 5;
