@@ -71,7 +71,7 @@ static void do_sigcont() {
 }
 
 static void do_exit() {
-	terminal_teardown();
+//	terminal_teardown();
 	_exit(0);
 }
 
@@ -83,10 +83,81 @@ static void usage(char *cmd) {
 	fflush(stdout);
 }
 
+static int notetranslate(char a){
+	char notesindexed[] = {'C', 'd', 'D', 'e', 'E', 'F', 'g', 'G','a','A','b','B'};
+	int i = 0;
+	while(i<12){
+		if (a==notesindexed[i]) return i;
+		i++;
+	}
+	return 0;
+}
+
+static int octavetranslate(char a){
+	if(a == '#') return octave;
+	else if(a>='0' && a<='9') return (a-'0');
+	else if(a>='a' && a<='z') return (octave-(a+1-'a'));
+	else if(a>='A' && a<='Z') return (octave+(a+1-'A'));
+	else return 5;
+}
+
+static int tmk_intepret(char opcode[4]){
+		switch(opcode[0]){
+		case 'n':
+			switch(opcode[3]){
+			case '!':
+				send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
+				break;
+			case 'X':
+				send_note_off(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
+				break;
+			}
+			break;
+		case 'o':
+			octave=octavetranslate(opcode[1]);
+			break;
+		case 'q':
+			printf("Exiting\r\n");
+			fflush(stdout);
+			do_exit();
+			break;
+		case 'p':
+			printf("Pausing\r\n");
+			unsigned char in_ch;
+			//cur_kb_mode = (char *) K_XLATE;
+			//ioctl(STDIN_FILENO, KDSKBMODE, K_XLATE);
+			int done = 0;
+			while(1) {
+				read(STDIN_FILENO, &in_ch , 1);
+				switch(in_ch) {
+				case '\t':
+			 		done = 1;
+					break;
+				case 'q':
+					printf("Exiting\r\n");
+					fflush(stdout);
+					do_exit();
+					break;
+				default:
+					break;
+				}
+				if (done) {
+					break;
+				}
+			}
+			printf("Resuming\r\n");
+			cur_kb_mode = (char *) K_RAW;
+			//ioctl(STDIN_FILENO, KDSKBMODE, K_RAW);
+			break;
+		default:
+			break;	
+		}
+	}
+
 int main(int argc, char *argv[])
 {
         unsigned char in_ch;
-	terminal_setup();
+	//terminal_setup();
 	signal(SIGINT, do_exit);
 	signal(SIGTERM, do_exit);
 	signal(SIGSTOP, terminal_teardown);
@@ -135,8 +206,35 @@ int main(int argc, char *argv[])
 	snd_seq_ev_set_source(ev, tmk_port);
 	ev->data.note.channel = 1;
 	ev->data.note.velocity = 127;
+
+	/*int keyn = 5; //defining the amount of keys we have, should be easily readable and changeable from config
+	char remappingtable_in[]={0xac, 0xad, 0x1e,0x11,0x1f}; //defining what scancodes to parse, with the release scancodes being auto-offset by 128. Ditto about config.
+	char remappingtable_out[][4]={"od  ","ou  ","nC##","nd##","nE##"}; //defining output to the interpreter, directly correlating with the index of the button that has been pressed. Config thing.
+
+	/* i envision this to work with like 4 byte opcodes given to the interpreter to tell it what to do. So that any amount of
+	buttons can be bound to any amount of actions in any given order. The opcode structure then would be:
+	"...." 4 chracters,
+	character 0 detailing what action to take, say "n" is for note actions. Then, in note actions:
+	character 1 would be the note (a-G), with CAPITAL characters being Cmaj, and non-capital characters - the flats, where appropriate.
+	character 2 would be "#"" for "current octave", a number for a specific octave, or a letter (a-z, CAPITALS up, noncaps - down) for an octave offset off the current octave.
+	and finally character 3 as "!"" for note_on, as "X" for send_note_off, or as "#" to let the interpreter automatically handle it by checking for scancodes offset by 128.
+	
+	then, evidently, char0 as "o" would mean the local octave actions, char2 be "u" or "d" for up and down and so forth.
+
+	This will need to be extensively documented!
+
+	this is just an example, but to be honest, its fairly easy to implement, so that's what im going to be doing*/
+
+	int i = 0;
+	/*while(i<keyn){
+		if(remappingtable_out[i][0])==
+		i++;
+	}*/
+	char temp_input[4];
         while(1) {
-        	read(STDIN_FILENO, &in_ch, 1);
+		scanf("%s", &temp_input);
+        tmk_intepret(temp_input);
+		/*	read(STDIN_FILENO, &in_ch, 1);
 		switch(in_ch) {
 		case 0xac: //octave down (z release)
 			if (octave == 0)
@@ -288,8 +386,8 @@ int main(int argc, char *argv[])
 			cur_kb_mode = (char *) K_RAW;
 			ioctl(STDIN_FILENO, KDSKBMODE, K_RAW);
 			break;
-		defualt:
+		default:
 			break;
-		}
+		}*/
 	}
 }
