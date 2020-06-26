@@ -108,7 +108,7 @@ static int tmk_intepret(char opcode[4]){
 			case '!':
 				send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
 				break;
-			case 'X':
+			case 'X' | 'x':
 				send_note_off(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
 				break;
 			}
