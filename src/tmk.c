@@ -6,6 +6,7 @@
 #include <termios.h>
 #include <signal.h>
 #include <alsa/asoundlib.h>
+#include <stdbool.h> 
 
 static snd_seq_t *handle;
 static int tmk_client;
@@ -84,7 +85,7 @@ static void usage(char *cmd) {
 }
 
 static int notetranslate(char a){
-	char notesindexed[] = {'C', 'd', 'D', 'e', 'E', 'F', 'g', 'G','a','A','b','B'};
+	char notesindexed[] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g','G','a','A','b'};
 	int i = 0;
 	while(i<12){
 		if (a==notesindexed[i]) return i;
@@ -207,187 +208,13 @@ int main(int argc, char *argv[])
 	ev->data.note.channel = 1;
 	ev->data.note.velocity = 127;
 
-	/*int keyn = 5; //defining the amount of keys we have, should be easily readable and changeable from config
+	int keyn = 5; //defining the amount of keys we have, should be easily readable and changeable from config
 	char remappingtable_in[]={0xac, 0xad, 0x1e,0x11,0x1f}; //defining what scancodes to parse, with the release scancodes being auto-offset by 128. Ditto about config.
 	char remappingtable_out[][4]={"od  ","ou  ","nC##","nd##","nE##"}; //defining output to the interpreter, directly correlating with the index of the button that has been pressed. Config thing.
-
-	/* i envision this to work with like 4 byte opcodes given to the interpreter to tell it what to do. So that any amount of
-	buttons can be bound to any amount of actions in any given order. The opcode structure then would be:
-	"...." 4 chracters,
-	character 0 detailing what action to take, say "n" is for note actions. Then, in note actions:
-	character 1 would be the note (a-G), with CAPITAL characters being Cmaj, and non-capital characters - the flats, where appropriate.
-	character 2 would be "#"" for "current octave", a number for a specific octave, or a letter (a-z, CAPITALS up, noncaps - down) for an octave offset off the current octave.
-	and finally character 3 as "!"" for note_on, as "X" for send_note_off, or as "#" to let the interpreter automatically handle it by checking for scancodes offset by 128.
-	
-	then, evidently, char0 as "o" would mean the local octave actions, char2 be "u" or "d" for up and down and so forth.
-
-	This will need to be extensively documented!
-
-	this is just an example, but to be honest, its fairly easy to implement, so that's what im going to be doing*/
-
-	int i = 0;
-	/*while(i<keyn){
-		if(remappingtable_out[i][0])==
-		i++;
-	}*/
+	bool quit = 0;
 	char temp_input[4];
-        while(1) {
+        while(!quit) {
 		scanf("%s", &temp_input);
         tmk_intepret(temp_input);
-		/*	read(STDIN_FILENO, &in_ch, 1);
-		switch(in_ch) {
-		case 0xac: //octave down (z release)
-			if (octave == 0)
-				break;
-			octave--;
-			break;
-		case 0xad: //octave up (x release)
-			if (octave == 10)
-				break;
-			octave++;
-			break;
-		case 0x1e: // C
-			send_note_on(12 * octave);
-			break;
-		case 0x9e:
-			send_note_off(12 * octave);
-			break;
-		case 0x11:
-			send_note_on(12 * octave + 1);
-			break;
-		case 0x91:
-			send_note_off(12 * octave + 1);
-			break;
-		case 0x1f:
-			send_note_on(12 * octave + 2);
-			break;
-		case 0x9f:
-			send_note_off(12 * octave + 2);
-			break;
-		case 0x12: // Eb (e key)
-			send_note_on(12 * octave + 3);
-			break;
-		case 0x92:
-			send_note_off(12 * octave + 3);
-			break;
-		case 0x20: // E (d key)
-			send_note_on(12 * octave + 4);
-			break;
-		case 0xa0:
-			send_note_off(12 * octave + 4);
-			break;
-		case 0x21:
-			send_note_on(12 * octave + 5);
-			break;
-		case 0xa1:
-			send_note_off(12 * octave + 5);
-			break;
-		case 0x14:
-			send_note_on(12 * octave + 6);
-			break;
-		case 0x94:
-			send_note_off(12 * octave + 6);
-			break;
-		case 0x22:
-			send_note_on(12 * octave + 7);
-			break;
-		case 0xa2:
-			send_note_off(12 * octave + 7);
-			break;
-		case 0x15: // G# (y key)
-			send_note_on(12 * octave + 8);
-			break;
-		case 0x95:
-			send_note_off(12 * octave + 8);
-			break;
-		case 0x23:
-			send_note_on(12 * octave + 9);
-			break;
-		case 0xa3:
-			send_note_off(12 * octave + 9);
-			break;
-		case 0x16:
-			send_note_on(12 * octave + 10);
-			break;
-		case 0x96:
-			send_note_off(12 * octave + 10);
-			break;
-		case 0x24:
-			send_note_on(12 * octave + 11);
-			break;
-		case 0xa4:
-			send_note_off(12 * octave + 11);
-			break;
-		case 0x25:
-			send_note_on(12 * octave + 12);
-			break;
-		case 0xa5:
-			send_note_off(12 * octave + 12);
-			break;
-		case 0x18:
-			send_note_on(12 * octave + 13);
-			break;
-		case 0x98:
-			send_note_off(12 * octave + 13);
-			break;
-		case 0x26:
-			send_note_on(12 * octave + 14);
-			break;
-		case 0xa6:
-			send_note_off(12 * octave + 14);
-			break;
-		case 0x19:
-			send_note_on(12 * octave + 15);
-			break;
-		case 0x99:
-			send_note_off(12 * octave + 15);
-			break;
-		case 0x27:
-			send_note_on(12 * octave + 16);
-			break;
-		case 0xa7:
-			send_note_off(12 * octave + 16);
-			break;
-		case 0x28:
-			send_note_on(12 * octave + 17);
-			break;
-		case 0xa8:
-			send_note_off(12 * octave + 17);
-			break;
-		case 0x90:
-			printf("Exiting\r\n");
-			fflush(stdout);
-			do_exit();
-			break;
-		case 0x0f:
-			printf("Pausing\r\n");
-			cur_kb_mode = (char *) K_XLATE;
-			ioctl(STDIN_FILENO, KDSKBMODE, K_XLATE);
-			int done = 0;
-			while(1) {
-				read(STDIN_FILENO, &in_ch , 1);
-				switch(in_ch) {
-				case '\t':
-			 		done = 1;
-					break;
-				case 'q':
-					printf("Exiting\r\n");
-					fflush(stdout);
-					do_exit();
-					break;
-				default:
-					break;
-				}
-				if (done) {
-					break;
-				}
-			}
-			printf("Resuming\r\n");
-			cur_kb_mode = (char *) K_RAW;
-			ioctl(STDIN_FILENO, KDSKBMODE, K_RAW);
-			break;
-		default:
-			break;
-		}*/
 	}
 }
