@@ -3,10 +3,12 @@
 #include <stdio.h>
 #include <sys/ioctl.h>
 #include <sys/kd.h>
-#include <termios.h>
+//#include <termios.h>
 #include <signal.h>
 #include <alsa/asoundlib.h>
 #include <stdbool.h> 
+#include <time.h>
+#include <ncurses.h>
 
 static snd_seq_t *handle;
 static int tmk_client;
@@ -18,8 +20,14 @@ static int queue;
 static int output_ret;
 static unsigned char octave = 5;
 
-static struct termios orig_term;
-static struct termios raw;
+#define WIDTH 30
+#define HEIGHT 10 
+
+int startx = 0;
+int starty = 0;
+
+//static struct termios orig_term;
+//static struct termios raw;
 static char * cur_kb_mode;
 
 static void send_note_on(unsigned char note) {
@@ -50,27 +58,6 @@ static void seq_init() {
 			SND_SEQ_PORT_TYPE_MIDI_GENERIC);
 }
 
-static void terminal_setup() {
-	tcgetattr(STDIN_FILENO, &orig_term);
-
-	raw = orig_term;
-	raw.c_lflag &= ~(ECHO | ICANON);
-	raw.c_iflag = 0;
-	tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-	cur_kb_mode = (char *) K_RAW;
-	ioctl(STDIN_FILENO, KDSKBMODE, cur_kb_mode);
-}
-
-static void terminal_teardown() {
-	tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_term);
-        ioctl(STDIN_FILENO, KDSKBMODE, K_XLATE);
-}
-
-static void do_sigcont() {
-	tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-	ioctl(0, KDSKBMODE, cur_kb_mode);
-}
-
 static void do_exit() {
 //	terminal_teardown();
 	_exit(0);
@@ -96,23 +83,80 @@ static int notetranslate(char a){
 
 static int octavetranslate(char a){
 	if(a == '#') return octave;
-	else if(a>='0' && a<='9') return (a+1-'0');
+	else if(a>='0' && a<='9') return (a-'0');
 	else if(a>='a' && a<='z') return (octave-(a+1-'a'));
 	else if(a>='A' && a<='Z') return (octave+(a+1-'A'));
 	else return 5;
 }
 
+double notetime[128]={ -1 };
+bool noteon[128]={ 0 };
+long int notetimer = 100;
+clock_t lasttime = 0;
+
+char cmdinput[4];
+static bool tmk_inputcommand(){
+	int i = 0;
+	bool ch = 0;
+	char c = getch();
+	if(c==ERR){c=0;}
+	if(c!=0){mvprintw(0, 0, "%d", c);}
+	if(c == 10){
+			clear();
+			mvprintw(1, 0, "%s", cmdinput); return 1;}
+	while(i<4 && ch == 0){
+		if(cmdinput[i]==0){cmdinput[i]=c; ch = 1;}
+		i++;
+	}
+	return 0;
+}
+
+static void tmk_cleannotes(){
+	clock_t newtime = clock();
+	double mselapsed = ((newtime-lasttime)/CLOCKS_PER_SEC)*1000;
+	//printf("%f", mselapsed);
+	int i = 0;
+	while(i<128){
+		if(notetime[i]>0 && !noteon[i]){notetime[i]=-1; noteon[i]=0; send_note_off(i);}
+		if(notetime[i]<=0 && noteon[i]){notetime[i]=-1; noteon[i]=0; send_note_off(i);}
+		if(notetime[i]>0){notetime[i]-=mselapsed;}
+		i++;
+	}
+	lasttime = newtime;
+}
+
 static int tmk_intepret(char opcode[4]){
 		switch(opcode[0]){
 		case 'n':
+			mvprintw(3, 0, "note %c @ %d %c", opcode[1], octavetranslate(opcode[2]), opcode[3]);
 			switch(opcode[3]){
 			case '!':
 				send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
+				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=1;
 				break;
 			case 'X' | 'x':
 				send_note_off(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
+				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=0;
 				break;
-			}
+			case '#':
+				send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
+				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=1;
+				notetime[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]= notetimer;
+				break;
+			case 'T':
+				if(noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]) {
+					send_note_off(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
+					noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=0;
+					}
+				else{
+					send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
+					noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=1;
+					} break;
+			default: 
+				send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
+				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=1;
+				break;
+				}
 			break;
 		case 'o':
 			octave=octavetranslate(opcode[1]);
@@ -122,7 +166,7 @@ static int tmk_intepret(char opcode[4]){
 			fflush(stdout);
 			do_exit();
 			break;
-		case 'p':
+/*		case 'p':
 			printf("Pausing\r\n");
 			unsigned char in_ch;
 			//cur_kb_mode = (char *) K_XLATE;
@@ -149,7 +193,7 @@ static int tmk_intepret(char opcode[4]){
 			printf("Resuming\r\n");
 			cur_kb_mode = (char *) K_RAW;
 			//ioctl(STDIN_FILENO, KDSKBMODE, K_RAW);
-			break;
+			break;*/
 		default:
 			break;	
 		}
@@ -157,12 +201,6 @@ static int tmk_intepret(char opcode[4]){
 
 int main(int argc, char *argv[])
 {
-        unsigned char in_ch;
-	//terminal_setup();
-	signal(SIGINT, do_exit);
-	signal(SIGTERM, do_exit);
-	signal(SIGSTOP, terminal_teardown);
-	signal(SIGCONT, do_sigcont);
 	seq_init();
 	if (argc > 2) {
 		printf("Too many arguments.\r\n");
@@ -208,13 +246,34 @@ int main(int argc, char *argv[])
 	ev->data.note.channel = 1;
 	ev->data.note.velocity = 127;
 
+	WINDOW *menu_win;
+	initscr();
+	cbreak();
+	menu_win = newwin(HEIGHT, WIDTH, starty, startx);
+	keypad(menu_win, TRUE);
 	int keyn = 5; //defining the amount of keys we have, should be easily readable and changeable from config
 	char remappingtable_in[]={0xac, 0xad, 0x1e,0x11,0x1f}; //defining what scancodes to parse, with the release scancodes being auto-offset by 128. Ditto about config.
 	char remappingtable_out[][4]={"od  ","ou  ","nC##","nd##","nE##"}; //defining output to the interpreter, directly correlating with the index of the button that has been pressed. Config thing.
 	bool quit = 0;
-	char temp_input[4];
+	bool ch = 0;
+	char temp_input[5] = {0,0,0,0};
         while(!quit) {
-		scanf("%s", &temp_input);
-        tmk_intepret(temp_input);
+		//scanf("%s", &temp_input);
+		ch = tmk_inputcommand();
+		if(ch){ch = 0;
+		int i = 0;
+		while(i<4){
+			temp_input[i]=cmdinput[i];
+			cmdinput[i]=0;
+			i++;
+		}
+		mvprintw(2, 0, "%s", temp_input);
+		tmk_intepret(temp_input);
+		i = 0;
+		while(i<4){
+			temp_input[i]=0;
+			i++;
+		}}
+		tmk_cleannotes();
 	}
 }
