@@ -85,11 +85,18 @@ static int notetranslate(char a){
 }
 
 static int octavetranslate(char a){
-	if(a == '#') return octave;
-	else if(a>='0' && a<='9') return (a-'0');
-	else if(a>='a' && a<='z') return (octave-(a+1-'a'));
-	else if(a>='A' && a<='Z') return (octave+(a+1-'A'));
-	else return 5;
+	int octaveresult = 5;
+	if(a == '#') octaveresult=octave;
+	else if(a>='0' && a<='9') octaveresult = (a-'0');
+	else if(a>='a' && a<='z') { 
+		if((octave-(a+1-'a')<0)){octaveresult=0;}
+		else{octaveresult=octave-(a+1-'a');}
+	}
+	else if(a>='A' && a<='Z'){
+		if((octave+(a+1-'A'))>10){octaveresult=10;}
+		else{octaveresult=octave+(a+1-'A');}
+	}
+	return octaveresult;
 }
 
 static int numbertranslate(char a, int power){
@@ -196,6 +203,7 @@ static int tmk_intepret(char opcode[4]){
 			break;
 		case 'o':
 			octave=octavetranslate(opcode[1]);
+			mvprintw(3, 0, "octave = %d", octave);
 			break;
 		case 'q':
 			printf("Exiting\r\n");
@@ -284,6 +292,7 @@ int main(int argc, char *argv[])
 			temp_input[i]=0;
 			i++;
 		}}
+		usleep(1000);
 		glcurtime=clock()/(CLOCKS_PER_SEC/1000);
 		if(glcurtime-gllasttime>1){
 		mvprintw(10,0,"%d",tmk_cleannotes(glcurtime));
