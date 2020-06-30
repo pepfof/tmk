@@ -7,8 +7,10 @@
 #include <signal.h>
 #include <alsa/asoundlib.h>
 #include <stdbool.h> 
-#include <time.h>
+#include <sys/time.h>
 #include <ncurses.h>
+#include <inttypes.h>
+#include <math.h>
 
 static snd_seq_t *handle;
 static int tmk_client;
@@ -20,8 +22,8 @@ static int queue;
 static int output_ret;
 static unsigned char octave = 5;
 
-#define WIDTH 30
-#define HEIGHT 10 
+#define WIDTH 128
+#define HEIGHT 50 
 
 int startx = 0;
 int starty = 0;
@@ -90,15 +92,17 @@ static int octavetranslate(char a){
 	else return 5;
 }
 
-double notetime[128]={ -1 };
-bool noteon[128]={ 0 };
-long int notetimer = 100;
-clock_t lasttime = 0;
+static int numbertranslate(char a, int power){
+	if(a>='0' && a<='9') return (a-'0')*(pow(64, power));
+	else if(a>='a' && a<='z') return (a-'a' + 10)*(pow(64, power));
+	else if(a>='A' && a<=93) return (a-'A' + 36)*(pow(64, power));
+	return 0;
+}
 
 int in_ch=0;
 
 char cmdinput[4];
-static bool tmk_inputcommand(WINDOW *mw){
+static bool tmk_inputcommand(WINDOW *mw){ //the display code is temporary
 	int i = 0; int j = 4;
 	bool ch = 0; bool backspace = 0;
 	in_ch = getch();
@@ -108,7 +112,7 @@ static bool tmk_inputcommand(WINDOW *mw){
 			mvprintw(1, 0, "collected: %s", cmdinput); return 1;}
 	if(in_ch==127){backspace = 1; mvprintw(0, 30, "backspace removes");}
 	while(i<4 && ch == 0 && backspace==0){
-		if(cmdinput[i]==0){
+		if(cmdinput[i]==0 | (i==3 && in_ch!=0)){
 			cmdinput[i]=in_ch;
 			ch = 1;
 			wmove(mw, 0, i);
@@ -131,18 +135,26 @@ static bool tmk_inputcommand(WINDOW *mw){
 	return 0;
 }
 
-/*static void tmk_cleannotes(){
-	clock_t newtime = clock();
-	double mselapsed = ((newtime-lasttime)/CLOCKS_PER_SEC)*1000;
+double notetime[128]={ 0 };
+char noteon[128]={ 0 };
+long int notetimer = 1000;
+clock_t lasttime = 0;
+clock_t newtime = 0;
+static clock_t tmk_cleannotes(clock_t curtime){
+	newtime = curtime;
+	clock_t mselapsed = (newtime-lasttime);
 	int i = 0;
 	while(i<128){
-		if(notetime[i]>0 && !noteon[i]){notetime[i]=-1; noteon[i]=0; send_note_off(i);}
-		if(notetime[i]<=0 && noteon[i]){notetime[i]=-1; noteon[i]=0; send_note_off(i);}
-		if(notetime[i]>0){notetime[i]-=mselapsed;}
+		if(notetime[i]>=0 && noteon[i]==2){notetime[i]-=mselapsed;}
+		if(notetime[i]<0 && noteon[i]==2){notetime[i] = 0; noteon[i]=0;send_note_off(i);}
+		if(notetime != 0 && noteon[i]!=2){notetime[i]=0;}
+		//mvprintw(9, i, "%d", notetime[i]);
+ 		//mvprintw(8, i, "%d", noteon[i]);
 		i++;
 	}
 	lasttime = newtime;
-}*/
+	return mselapsed;
+}
 
 static int tmk_intepret(char opcode[4]){
 		switch(opcode[0]){
@@ -160,7 +172,7 @@ static int tmk_intepret(char opcode[4]){
 				break;
 			case '#':
 				send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
-				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=1;
+				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=2;
 				notetime[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]= notetimer;
 				break;
 			case 'T' | 't':
@@ -177,6 +189,10 @@ static int tmk_intepret(char opcode[4]){
 				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=1;
 				break;
 				}
+			break;
+		case 'd':
+			notetimer=numbertranslate(opcode[1],2)+numbertranslate(opcode[2],1)+numbertranslate(opcode[3],0);
+			mvprintw(3, 0, "notetimer = %dms", notetimer);
 			break;
 		case 'o':
 			octave=octavetranslate(opcode[1]);
@@ -235,14 +251,14 @@ int main(int argc, char *argv[])
 	snd_seq_ev_set_source(ev, tmk_port);
 	ev->data.note.channel = 1;
 	ev->data.note.velocity = 127;
+	
+	clock_t gllasttime = 0;
+	clock_t glcurtime = 0;
 
 	WINDOW *menu_win;
 	initscr();
 	menu_win = newwin(HEIGHT, WIDTH, starty, startx);
 	keypad(menu_win, TRUE);
-	/*int keyn = 5; //defining the amount of keys we have, should be easily readable and changeable from config
-	char remappingtable_in[]={0xac, 0xad, 0x1e,0x11,0x1f}; //defining what scancodes to parse, with the release scancodes being auto-offset by 128. Ditto about config.
-	char remappingtable_out[][4]={"od  ","ou  ","nC##","nd##","nE##"}; //defining output to the interpreter, directly correlating with the index of the button that has been pressed. Config thing.*/
 	bool quit = 0;
 	bool ch = 0;
 	nodelay(menu_win, 1);
@@ -268,7 +284,10 @@ int main(int argc, char *argv[])
 			temp_input[i]=0;
 			i++;
 		}}
-		//tmk_cleannotes();
+		glcurtime=clock()/(CLOCKS_PER_SEC/1000);
+		if(glcurtime-gllasttime>1){
+		mvprintw(10,0,"%d",tmk_cleannotes(glcurtime));
+		gllasttime=glcurtime;}
 		wrefresh(menu_win);
 	}
 }
