@@ -159,10 +159,10 @@ static bool tmk_cleannotes(long long int curtime){
 		if(notetime[i]>=0 && noteon[i]==2){notetime[i]-=mselapsed;}
 		if(notetime[i]<0 && noteon[i]==2){notetime[i] = 0; noteon[i]=0;send_note_off(i);}
 		if(notetime != 0 && noteon[i]!=2){notetime[i]=0;}
-		if(noteon[i]==2){mvprintw(4, i, "a"); checkno = 1;}
-		mvprintw(7, i, "%d", checkno);
+		//if(noteon[i]==2){mvprintw(4, i, "a"); checkno = 1;}
+		/*mvprintw(7, i, "%d", checkno);
 		mvprintw(9, i, "%d", notetime[i]);
- 		mvprintw(8, i, "%d", noteon[i]);
+ 		mvprintw(8, i, "%d", noteon[i]);*/
 		i++;
 	}
 	lasttime = newtime;
