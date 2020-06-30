@@ -292,10 +292,10 @@ int main(int argc, char *argv[])
 			temp_input[i]=0;
 			i++;
 		}}
-		usleep(1000);
+		usleep(100);
 		glcurtime=clock()/(CLOCKS_PER_SEC/1000);
 		if(glcurtime-gllasttime>1){
-		mvprintw(10,0,"%d",tmk_cleannotes(glcurtime));
+		tmk_cleannotes(glcurtime);
 		gllasttime=glcurtime;}
 		wrefresh(menu_win);
 	}
