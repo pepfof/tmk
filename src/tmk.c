@@ -22,9 +22,8 @@ static int queue;
 static int output_ret;
 static unsigned char octave = 5;
 
-#define WIDTH 128
-#define HEIGHT 50 
-
+int lengthx = 40;
+int lengthy = 40;
 int startx = 0;
 int starty = 0;
 
@@ -85,7 +84,7 @@ static int notetranslate(char a){
 }
 
 static int octavetranslate(char a){
-	int octaveresult = 5;
+	int octaveresult = octave;
 	if(a == '#') octaveresult=octave;
 	else if(a>='0' && a<='9') octaveresult = (a-'0');
 	else if(a>='a' && a<='z') { 
@@ -109,36 +108,41 @@ static int numbertranslate(char a, int power){
 int in_ch=0;
 
 char cmdinput[4];
-static bool tmk_inputcommand(WINDOW *mw){ //the display code is temporary
+static bool tmk_inputcommand(WINDOW *mw, int x, int y){ //the display code is temporary
 	int i = 0; int j = 4;
 	bool ch = 0; bool backspace = 0;
 	in_ch = getch();
 	if(in_ch==ERR){in_ch=0;}
 	if(in_ch == 10){
-			clear();
-			mvprintw(0, 5, "->");
-			mvprintw(1, 0, "collected: %s", cmdinput); return 1;}
-	if(in_ch==127){backspace = 1; mvprintw(0, 5, "<-");}
+		clear();
+			//mvprintw(0, 5, "->");
+			//mvprintw(1, 0, "collected: %s", cmdinput);
+		return 1;
+		}
+	if(in_ch==127){
+			backspace = 1; /*mvprintw(0, 5, "<-");*/
+		}
 	while(i<4 && ch == 0 && backspace==0){
 		if(cmdinput[i]==0 | (i==3 && in_ch!=0)){
 			cmdinput[i]=in_ch;
 			ch = 1;
-			wmove(mw, 0, i);
+			wmove(mw, y, x+i+1);
 			}
 		i++;
 	}
 	while(j>=0 && ch == 0 && backspace==1){
 		if(cmdinput[j]!=0){
 			cmdinput[j]=0;
-			mvprintw(0, j, " ");
-			wmove(mw, 0, j);
+			mvprintw(y, x+j+1, " ");
+			wmove(mw, y, x+j+1);
 			ch = 1;
 			backspace=0;
 			}
 		j--;
 	}
-	if(in_ch!=0){
-		mvprintw(0, 0, "%s", cmdinput);}
+	if(in_ch!=0 || 1){
+		mvprintw(y, x, "[    ]", cmdinput);
+		mvprintw(y, x+1, "%s", cmdinput);}
 	return 0;
 }
 
@@ -150,15 +154,27 @@ long int notetimer = 1000;
 long long int lasttime = 0;
 long long int newtime = 0;
 
-static bool tmk_cleannotes(long long int curtime){
+char reportstring[50]="Started!";
+char lastreport[50];
+
+static bool tmk_autonotes(long long int curtime){
 	newtime = curtime;
 	long long int mselapsed = (newtime-lasttime);
 	bool checkno = 0;
 	int i = 0;
 	while(i<128){
-		if(notetime[i]>=0 && noteon[i]==2){notetime[i]-=mselapsed;}
-		if(notetime[i]<0 && noteon[i]==2){notetime[i] = 0; noteon[i]=0;send_note_off(i);}
-		if(notetime != 0 && noteon[i]!=2){notetime[i]=0;}
+		if(notetime[i]>=0 && noteon[i]==2){
+			notetime[i]-=mselapsed;
+		}
+		if(notetime[i]<0 && noteon[i]==2){
+			notetime[i] = 0; 
+			noteon[i]=0;
+			send_note_off(i);
+			sprintf(reportstring, "note %d autooff\0", i);
+		}
+		if(notetime != 0 && noteon[i]!=2){
+			notetime[i]=0;
+		}
 		//if(noteon[i]==2){mvprintw(4, i, "a"); checkno = 1;}
 		/*mvprintw(7, i, "%d", checkno);
 		mvprintw(9, i, "%d", notetime[i]);
@@ -173,10 +189,9 @@ static bool tmk_cleannotes(long long int curtime){
 static int tmk_intepret(char opcode[4]){
 		switch(opcode[0]){
 		case 'n':
-			mvprintw(3, 0, "note %c @ %d %c", opcode[1], octavetranslate(opcode[2]), opcode[3]);
+			sprintf(reportstring, "note %c @ %d %c\0", opcode[1], octavetranslate(opcode[2]), opcode[3]);
 			switch(opcode[3]){
 			case '!':
-				mvprintw(3, 0, "note %c @ %d %c", opcode[1], octavetranslate(opcode[2]), opcode[3]);
 				send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
 				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=1;
 				break;
@@ -207,14 +222,14 @@ static int tmk_intepret(char opcode[4]){
 			break;
 		case 'd':
 			notetimer=numbertranslate(opcode[1],2)+numbertranslate(opcode[2],1)+numbertranslate(opcode[3],0);
-			mvprintw(3, 0, "notetimer = %dms", notetimer);
+			sprintf(reportstring, "notetimer = %dms\0", notetimer);
 			break;
 		case 'o':
 			octave=octavetranslate(opcode[1]);
-			mvprintw(3, 0, "octave = %d", octave);
+			sprintf(reportstring, "octave = %d\0", octave);
 			break;
 		case 'q':
-			printf("Exiting\r\n");
+			usleep(1000000);
 			fflush(stdout);
 			do_exit();
 			break;
@@ -223,8 +238,21 @@ static int tmk_intepret(char opcode[4]){
 		}
 	}
 
-int main(int argc, char *argv[])
-{
+
+static void tmk_report(bool decoration, int x, int y){
+if(strcmp(reportstring, lastreport)!=0){
+	if(decoration){
+		mvprintw(y,x,"TMK REPORTS:");
+		mvprintw(y,x+13,"%s", reportstring);
+	}
+	else{
+		mvprintw(y,x,"%s", reportstring);
+	}
+}
+	strcpy(lastreport,reportstring);
+}
+
+int main(int argc, char *argv[]){
 	seq_init();
 	if (argc > 2) {mvprintw(0, 0, "%s", cmdinput);
 		do_exit();
@@ -274,7 +302,7 @@ int main(int argc, char *argv[])
 
 	WINDOW *menu_win;
 	initscr();
-	menu_win = newwin(HEIGHT, WIDTH, starty, startx);
+	menu_win = newwin(lengthx, lengthy, starty, startx);
 	keypad(menu_win, TRUE);
 	bool quit = 0;
 	bool ch = 0;
@@ -283,11 +311,10 @@ int main(int argc, char *argv[])
 	refresh();
 	noecho();
 	nice(80);
+	curs_set(2);
 	char temp_input[5] = {0,0,0,0};
         while(!quit) {
-		//mvprintw(8, 0, "%d", clock());
-		//scanf("%s", &temp_input);
-		ch = tmk_inputcommand(menu_win);
+		ch = tmk_inputcommand(menu_win, 0, 0);
 		if(ch){ch = 0;
 		int i = 0;
 		while(i<4){
@@ -295,7 +322,6 @@ int main(int argc, char *argv[])
 			cmdinput[i]=0;
 			i++;
 		}
-		mvprintw(2, 0, "passed to interp: %s", temp_input);
 		tmk_intepret(temp_input);
 		i = 0;
 		while(i<4){
@@ -304,12 +330,12 @@ int main(int argc, char *argv[])
 		}}
 		clock_gettime(CLOCK_MONOTONIC, &timems);
 		glcurtime=timems.tv_sec*1000+timems.tv_nsec/1000000;
-		if(glcurtime-gllasttime>1 /*&& notetimeron*/){
-		/*notetimeron=*/tmk_cleannotes(glcurtime);
+		if(glcurtime-gllasttime>=1){
+		tmk_autonotes(glcurtime);
+		tmk_report(1, 0, 1);
 		gllasttime=glcurtime;}
 		wrefresh(menu_win);
-		mvprintw(5,0,"%d",glcurtime);
-		//mvprintw(6,0,"%d",notetimeron);
+		//mvprintw(5,0,"%d",glcurtime);
 		usleep(10000);
 	}
 }
