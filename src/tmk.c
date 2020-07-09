@@ -73,9 +73,11 @@ static void usage(char *cmd) {
 	fflush(stdout);
 }
 
-static int notetranslate(char a){
+static char notetranslate(char a, bool reverse){
 	char notesindexed[] = {'c', 'C', 'd', 'D', 'e', 'f', 'F', 'g','G','a','A','b'};
 	int i = 0;
+	if(reverse && a>=0 && a<12) return notesindexed[a];
+	else if(reverse) return 0;
 	while(i<12){
 		if (a==notesindexed[i]) return i;
 		i++;
@@ -114,8 +116,7 @@ static bool tmk_inputcommand(WINDOW *mw, int x, int y){ //the display code is te
 	in_ch = getch();
 	if(in_ch==ERR){in_ch=0;}
 	if(in_ch == 10){
-		clear();
-			//mvprintw(0, 5, "->");
+			mvprintw(y, x+1, "    ");
 			//mvprintw(1, 0, "collected: %s", cmdinput);
 		return 1;
 		}
@@ -170,7 +171,7 @@ static bool tmk_autonotes(long long int curtime){
 			notetime[i] = 0; 
 			noteon[i]=0;
 			send_note_off(i);
-			sprintf(reportstring, "note %d autooff\0", i);
+			sprintf(reportstring, "note %c @ %d autooff\0", notetranslate(i%12,1),i/12);
 		}
 		if(notetime != 0 && noteon[i]!=2){
 			notetime[i]=0;
@@ -190,33 +191,34 @@ static int tmk_intepret(char opcode[4]){
 		switch(opcode[0]){
 		case 'n':
 			sprintf(reportstring, "note %c @ %d %c\0", opcode[1], octavetranslate(opcode[2]), opcode[3]);
+			char lnote = notetranslate(opcode[1],0); char locta = octavetranslate(opcode[2]);
 			switch(opcode[3]){
 			case '!':
-				send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
-				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=1;
+				send_note_on(12 * locta+lnote);
+				noteon[12 * locta+lnote]=1;
 				break;
 			case 'X' | 'x':
-				send_note_off(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
-				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=0;
+				send_note_off(12 * locta+lnote);
+				noteon[12 * locta+lnote]=0;
 				break;
 			case '#':
-				send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
-				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=2;
-				notetime[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]= notetimer;
+				send_note_on(12 * locta+lnote);
+				noteon[12 * locta+lnote]=2;
+				notetime[12 * locta+lnote]= notetimer;
 				notetimeron=1;
 				break;
 			case 'T' | 't':
-				if(noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]) {
-					send_note_off(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
-					noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=0;
+				if(noteon[12 * locta+lnote]) {
+					send_note_off(12 * locta+lnote);
+					noteon[12 * locta+lnote]=0;
 					}
 				else{
-					send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
-					noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=1;
+					send_note_on(12 * locta+lnote);
+					noteon[12 * locta+lnote]=1;
 					} break;
 			default: mvprintw(0, 0, "%s", cmdinput);
-				send_note_on(12 * octavetranslate(opcode[2])+notetranslate(opcode[1]));
-				noteon[12 * octavetranslate(opcode[2])+notetranslate(opcode[1])]=1;
+				send_note_on(12 * locta+lnote);
+				noteon[12 * locta+lnote]=1;
 				break;
 				}
 			break;
@@ -241,6 +243,7 @@ static int tmk_intepret(char opcode[4]){
 
 static void tmk_report(bool decoration, int x, int y){
 if(strcmp(reportstring, lastreport)!=0){
+	clear();
 	if(decoration){
 		mvprintw(y,x,"TMK REPORTS:");
 		mvprintw(y,x+13,"%s", reportstring);
