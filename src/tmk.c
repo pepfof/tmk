@@ -171,7 +171,7 @@ static bool tmk_autonotes(long long int curtime){
 			notetime[i] = 0; 
 			noteon[i]=0;
 			send_note_off(i);
-			sprintf(reportstring, "note %c @ %d autooff\0", notetranslate(i%12,1),i/12);
+			sprintf(reportstring, "note %c @ %d autooff", notetranslate(i%12,1),i/12);
 		}
 		if(notetime != 0 && noteon[i]!=2){
 			notetime[i]=0;
@@ -190,7 +190,7 @@ static bool tmk_autonotes(long long int curtime){
 static int tmk_intepret(char opcode[4]){
 		switch(opcode[0]){
 		case 'n':
-			sprintf(reportstring, "note %c @ %d %c\0", opcode[1], octavetranslate(opcode[2]), opcode[3]);
+			sprintf(reportstring, "note %c @ %d %c", opcode[1], octavetranslate(opcode[2]), opcode[3]);
 			char lnote = notetranslate(opcode[1],0); char locta = octavetranslate(opcode[2]);
 			switch(opcode[3]){
 			case '!':
@@ -224,11 +224,11 @@ static int tmk_intepret(char opcode[4]){
 			break;
 		case 'd':
 			notetimer=numbertranslate(opcode[1],2)+numbertranslate(opcode[2],1)+numbertranslate(opcode[3],0);
-			sprintf(reportstring, "notetimer = %dms\0", notetimer);
+			sprintf(reportstring, "notetimer = %ldms", notetimer);
 			break;
 		case 'o':
 			octave=octavetranslate(opcode[1]);
-			sprintf(reportstring, "octave = %d\0", octave);
+			sprintf(reportstring, "octave = %d", octave);
 			break;
 		case 'q':
 			usleep(1000000);
@@ -313,7 +313,7 @@ int main(int argc, char *argv[]){
 	timeout(0);
 	refresh();
 	noecho();
-	nice(80);
+	//nice(80);
 	curs_set(2);
 	char temp_input[5] = {0,0,0,0};
         while(!quit) {
