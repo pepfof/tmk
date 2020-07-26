@@ -1,6 +1,7 @@
 #include <config.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/kd.h>
 //#include <termios.h>
@@ -11,13 +12,12 @@
 #include <ncurses.h>
 #include <inttypes.h>
 #include <math.h>
-
+static snd_seq_event_t *ev;
 static snd_seq_t *handle;
 static int tmk_client;
 static int tmk_port = 0;
 static int dest_client;
 static int dest_port;
-static snd_seq_event_t *ev;
 static int queue;
 static int output_ret;
 static unsigned char octave = 5;
@@ -26,6 +26,9 @@ int lengthx = 40;
 int lengthy = 40;
 int startx = 0;
 int starty = 0;
+
+static char pathtoconfig[256];
+#define maxparserkeyn 255
 
 //static struct termios orig_term;
 //static struct termios raw;
@@ -59,9 +62,11 @@ static void seq_init() {
 			SND_SEQ_PORT_TYPE_MIDI_GENERIC);
 }
 
-static void do_exit() {
+static void do_exit(const char* reason) {
 //	terminal_teardown();
 	endwin();
+	printf("tmk quit: %s\n", reason);
+	fflush(stdout);
 	_exit(0);
 }
 
@@ -107,10 +112,20 @@ static int numbertranslate(char a, int power){
 	return 0;
 }
 
-int in_ch=0;
+
+bool notetimeron = 0;
+double notetime[128]={ 0 };
+char noteon[128]={ 0 };
+long int notetimer = 1000;
+long long int lasttime = 0;
+long long int newtime = 0;
+
+char reportstring[50]="Started!";
+char lastreport[50];
 
 char cmdinput[4];
 static bool tmk_inputcommand(WINDOW *mw, int x, int y){ //the display code is temporary
+	int in_ch=0;
 	int i = 0; int j = 4;
 	bool ch = 0; bool backspace = 0;
 	in_ch = getch();
@@ -141,22 +156,31 @@ static bool tmk_inputcommand(WINDOW *mw, int x, int y){ //the display code is te
 			}
 		j--;
 	}
-	if(in_ch!=0 || 1){
+	if(/*in_ch!=0 || */1){
 		mvprintw(y, x, "[    ]", cmdinput);
 		mvprintw(y, x+1, "%s", cmdinput);}
 	return 0;
 }
 
+static bool tmk_readconfig(){
+FILE *tmkconfig;
+char buff[256];
+tmkconfig=fopen(pathtoconfig, "a+");
+if(tmkconfig==NULL) do_exit("could not open config file, run tmk-config. if problem persists, file a bug report.");
+int parserkeysn=0;
+static int parserin[maxparserkeyn];
+static char parserout[maxparserkeyn][4];
+sprintf(reportstring, "%s", pathtoconfig);
+fgets(buff, 255, (FILE*)tmkconfig);
+if(!strcmp(buff, "tmk:")) do_exit("improper config, run tmk-config first. (not implemented)");
+}
 
-bool notetimeron = 0;
-double notetime[128]={ 0 };
-char noteon[128]={ 0 };
-long int notetimer = 1000;
-long long int lasttime = 0;
-long long int newtime = 0;
 
-char reportstring[50]="Started!";
-char lastreport[50];
+static bool tmk_parse(WINDOW *mv){
+	int in_ch=0;
+	in_ch = getch();
+	if(in_ch==ERR){in_ch=0;}
+}
 
 static bool tmk_autonotes(long long int curtime){
 	newtime = curtime;
@@ -189,7 +213,7 @@ static bool tmk_autonotes(long long int curtime){
 
 static int tmk_intepret(char opcode[4]){
 		switch(opcode[0]){
-		case 'n':
+		case 'n':{
 			sprintf(reportstring, "note %c @ %d %c", opcode[1], octavetranslate(opcode[2]), opcode[3]);
 			char lnote = notetranslate(opcode[1],0); char locta = octavetranslate(opcode[2]);
 			switch(opcode[3]){
@@ -221,22 +245,21 @@ static int tmk_intepret(char opcode[4]){
 				noteon[12 * locta+lnote]=1;
 				break;
 				}
-			break;
-		case 'd':
+			break;}
+		case 'd':{
 			notetimer=numbertranslate(opcode[1],2)+numbertranslate(opcode[2],1)+numbertranslate(opcode[3],0);
 			sprintf(reportstring, "notetimer = %ldms", notetimer);
-			break;
-		case 'o':
+			break;}
+		case 'o':{
 			octave=octavetranslate(opcode[1]);
 			sprintf(reportstring, "octave = %d", octave);
-			break;
-		case 'q':
-			usleep(1000000);
+			break;}
+		case 'q':{
 			fflush(stdout);
-			do_exit();
-			break;
-		default:
-			break;	
+			do_exit("by user.");
+			break;}
+		default:{
+			break;	}
 		}
 	}
 
@@ -257,10 +280,11 @@ if(strcmp(reportstring, lastreport)!=0){
 
 int main(int argc, char *argv[]){
 	seq_init();
-	if (argc > 2) {mvprintw(0, 0, "%s", cmdinput);
-		do_exit();
+	if (argc > 2) {
+		do_exit("too many arguments. use --help");
 	}
 	if (argc == 2) {
+		char buff[255];
 		if (sscanf(argv[1],"%d:%d",&dest_client,&dest_port) == 2) {
 			tmk_client = snd_seq_client_id(handle);
 			snd_seq_addr_t tmk, dest;
@@ -273,26 +297,25 @@ int main(int argc, char *argv[]){
 			snd_seq_port_subscribe_set_sender(sub, &tmk);
 			snd_seq_port_subscribe_set_dest(sub, &dest);
 			if (snd_seq_subscribe_port(handle, sub) < 0) {
-				printf("Error connecting to midi client: %s\r\n", argv[1]);
+				sprintf(buff,"Error connecting to midi client: %s\r\n", argv[1]);
 				fflush(stdout);
-				do_exit();
+				do_exit(buff);
 			}
 		}
 		else if (strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
 			usage(argv[0]);
-			do_exit();
+			do_exit("Thanks for reading the help!");
 		}
 		else {
-			printf("Unknown argument: %s\r\n", argv[1]);
+			sprintf(buff, "Unknown argument: %s\r\n", argv[1]);
 			usage(argv[0]);
-			do_exit();
+			do_exit(buff);
 		}
 	}
-	ev = malloc(sizeof(snd_seq_event_t));
+	ev = malloc(sizeof(*ev));
 	if (ev == NULL) {
-		printf("Could not allocate midi event.\r\n");
 		fflush(stdout);
-		do_exit();
+		do_exit("could not allocate midi event.");
 	}
 	snd_seq_ev_set_direct(ev);
 	snd_seq_ev_set_source(ev, tmk_port);
@@ -302,7 +325,6 @@ int main(int argc, char *argv[]){
 	long long int gllasttime = 0;
 	long long int glcurtime = 0;
 	struct timespec timems;
-
 	WINDOW *menu_win;
 	initscr();
 	menu_win = newwin(lengthx, lengthy, starty, startx);
@@ -314,7 +336,9 @@ int main(int argc, char *argv[]){
 	refresh();
 	noecho();
 	//nice(80);
-	curs_set(2);
+	curs_set(0);
+	sprintf(pathtoconfig, "%s%s", getenv("HOME"), "/.config/tmk.conf");
+	tmk_readconfig();
 	char temp_input[5] = {0,0,0,0};
         while(!quit) {
 		ch = tmk_inputcommand(menu_win, 0, 0);
@@ -341,4 +365,5 @@ int main(int argc, char *argv[]){
 		//mvprintw(5,0,"%d",glcurtime);
 		usleep(10000);
 	}
+	do_exit("unknown cause.");
 }
