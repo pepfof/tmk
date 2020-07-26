@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/kd.h>
-//#include <termios.h>
 #include <signal.h>
 #include <alsa/asoundlib.h>
 #include <stdbool.h> 
@@ -26,9 +25,6 @@ int lengthx = 40;
 int lengthy = 40;
 int startx = 0;
 int starty = 0;
-
-static char pathtoconfig[256];
-#define maxparserkeyn 255
 
 //static struct termios orig_term;
 //static struct termios raw;
@@ -142,6 +138,7 @@ static bool tmk_inputcommand(WINDOW *mw, int x, int y){ //the display code is te
 		if(cmdinput[i]==0 | (i==3 && in_ch!=0)){
 			cmdinput[i]=in_ch;
 			ch = 1;
+			mvprintw(y, x+i+1, "%c", in_ch);
 			wmove(mw, y, x+i+1);
 			}
 		i++;
@@ -157,24 +154,12 @@ static bool tmk_inputcommand(WINDOW *mw, int x, int y){ //the display code is te
 		j--;
 	}
 	if(/*in_ch!=0 || */1){
-		mvprintw(y, x, "[    ]", cmdinput);
-		mvprintw(y, x+1, "%s", cmdinput);}
+		mvprintw(y, x, "[", cmdinput);
+		mvprintw(y, x+5, "]", cmdinput);
+		//mvprintw(y, x+1, "%s", cmdinput);
+		}
 	return 0;
 }
-
-static bool tmk_readconfig(){
-FILE *tmkconfig;
-char buff[256];
-tmkconfig=fopen(pathtoconfig, "a+");
-if(tmkconfig==NULL) do_exit("could not open config file, run tmk-config. if problem persists, file a bug report.");
-int parserkeysn=0;
-static int parserin[maxparserkeyn];
-static char parserout[maxparserkeyn][4];
-sprintf(reportstring, "%s", pathtoconfig);
-fgets(buff, 255, (FILE*)tmkconfig);
-if(!strcmp(buff, "tmk:")) do_exit("improper config, run tmk-config first. (not implemented)");
-}
-
 
 static bool tmk_parse(WINDOW *mv){
 	int in_ch=0;
@@ -336,9 +321,7 @@ int main(int argc, char *argv[]){
 	refresh();
 	noecho();
 	//nice(80);
-	curs_set(0);
-	sprintf(pathtoconfig, "%s%s", getenv("HOME"), "/.config/tmk.conf");
-	tmk_readconfig();
+	curs_set(1);
 	char temp_input[5] = {0,0,0,0};
         while(!quit) {
 		ch = tmk_inputcommand(menu_win, 0, 0);
