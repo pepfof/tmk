@@ -1,4 +1,4 @@
-AC_INIT([tmk], [0.1], [calvin.kosmatka@gmail.com])
+AC_INIT([tmc], [0.2], [artemiodro@gmail.com])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
 AC_PROG_CC([gcc])
 AC_CONFIG_HEADERS([config.h])
