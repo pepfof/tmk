@@ -347,5 +347,6 @@ int main(int argc, char *argv[]){
 		//mvprintw(5,0,"%d",glcurtime);
 		usleep(10000);
 	}
+	
 	do_exit("unknown cause.");
 }
